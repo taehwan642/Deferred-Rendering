@@ -67,20 +67,20 @@ INT WINAPI wWinMain( HINSTANCE, HINSTANCE, LPWSTR, int )
 #endif
 
     DXUTSetCallbackD3D9DeviceAcceptable( IsD3D9DeviceAcceptable );
+    DXUTSetCallbackDeviceChanging( ModifyDeviceSettings );
     DXUTSetCallbackD3D9DeviceCreated( OnD3D9CreateDevice );
     DXUTSetCallbackD3D9DeviceReset( OnD3D9ResetDevice );
+    DXUTSetCallbackFrameMove( OnFrameMove );
     DXUTSetCallbackD3D9FrameRender( OnD3D9FrameRender );
+    DXUTSetCallbackMsgProc( MsgProc );
     DXUTSetCallbackD3D9DeviceLost( OnD3D9LostDevice );
     DXUTSetCallbackD3D9DeviceDestroyed( OnD3D9DestroyDevice );
-    DXUTSetCallbackDeviceChanging( ModifyDeviceSettings );
-    DXUTSetCallbackMsgProc( MsgProc );
-    DXUTSetCallbackFrameMove( OnFrameMove );
 
     DXUTInit( true, true );
     DXUTSetHotkeyHandling( true, true, true );
     DXUTSetCursorSettings( true, true );
     DXUTCreateWindow( L"DeferredRendering" );
-    DXUTCreateDevice( true, 640, 480 );
+    DXUTCreateDevice( true, 1280, 720 );
 
     DXUTMainLoop();
 
