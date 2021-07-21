@@ -1,5 +1,10 @@
 #include "DXUT.h"
+#include "Mesh.h"
+#include "Shader.h"
 #include "resource.h"
+
+constexpr int screenWidth = 1280;
+constexpr int screenHeight = 720;
 
 bool CALLBACK IsD3D9DeviceAcceptable( D3DCAPS9* pCaps, D3DFORMAT AdapterFormat, D3DFORMAT BackBufferFormat,
                                       bool bWindowed, void* pUserContext )
@@ -80,7 +85,7 @@ INT WINAPI wWinMain( HINSTANCE, HINSTANCE, LPWSTR, int )
     DXUTSetHotkeyHandling( true, true, true );
     DXUTSetCursorSettings( true, true );
     DXUTCreateWindow( L"DeferredRendering" );
-    DXUTCreateDevice( true, 1280, 720 );
+    DXUTCreateDevice( true, screenWidth, screenHeight );
 
     DXUTMainLoop();
 
