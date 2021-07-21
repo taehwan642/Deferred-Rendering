@@ -2,9 +2,17 @@
 #include "Mesh.h"
 #include "Shader.h"
 #include "resource.h"
+#include <memory>
 
 constexpr int screenWidth = 1280;
 constexpr int screenHeight = 720;
+
+D3DXMATRIX world;
+D3DXMATRIX view;
+D3DXMATRIX proj;
+
+Mesh* mesh;
+Shader* shader;
 
 bool CALLBACK IsD3D9DeviceAcceptable( D3DCAPS9* pCaps, D3DFORMAT AdapterFormat, D3DFORMAT BackBufferFormat,
                                       bool bWindowed, void* pUserContext )
@@ -26,6 +34,30 @@ bool CALLBACK ModifyDeviceSettings( DXUTDeviceSettings* pDeviceSettings, void* p
 HRESULT CALLBACK OnD3D9CreateDevice( IDirect3DDevice9* pd3dDevice, const D3DSURFACE_DESC* pBackBufferSurfaceDesc,
                                      void* pUserContext )
 {
+    D3DXMatrixPerspectiveFovLH(&proj, D3DXToRadian(70),
+        static_cast<FLOAT>(DXUTGetD3D9BackBufferSurfaceDesc()->Width) /
+        static_cast<FLOAT>(DXUTGetD3D9BackBufferSurfaceDesc()->Height),
+        1,
+        500);
+    pd3dDevice->SetTransform(D3DTS_PROJECTION, &proj);
+
+    D3DXVECTOR3 eye = { 0.f, 3.1f, -0.001f };
+    D3DXVECTOR3 lookat = { 0.f, -1.f, 0.f };
+    D3DXVECTOR3 up = { 0.f, 1.f, 0.f };
+    D3DXMatrixLookAtLH(&view, &eye, &lookat, &up);
+    pd3dDevice->SetTransform(D3DTS_VIEW, &view);
+
+    D3DXMatrixTranslation(&world, 0, 0, 0);
+    pd3dDevice->SetTransform(D3DTS_WORLD, &world);
+
+    mesh = new Mesh;
+    mesh->Load(pd3dDevice, L"Resources/", L"Missile.X");
+    
+    shader = new Shader;
+    shader->Load(pd3dDevice, L"testShader.fx");
+
+    pd3dDevice->SetRenderState(D3DRS_LIGHTING, false);
+
     return S_OK;
 }
 
@@ -47,6 +79,16 @@ void CALLBACK OnD3D9FrameRender( IDirect3DDevice9* pd3dDevice, double fTime, flo
 
     if( SUCCEEDED( pd3dDevice->BeginScene() ) )
     {
+        const LPD3DXEFFECT effect = shader->GetEffect();
+        D3DXMATRIX result = world * view * proj;
+        effect->SetMatrix((D3DXHANDLE)"WVP", &result);
+
+        effect->Begin(NULL, 0);
+        effect->BeginPass(0);
+        mesh->Render(shader);
+        effect->EndPass();
+        effect->End();
+
         V( pd3dDevice->EndScene() );
     }
 }
@@ -63,6 +105,8 @@ void CALLBACK OnD3D9LostDevice( void* pUserContext )
 
 void CALLBACK OnD3D9DestroyDevice( void* pUserContext )
 {
+    delete shader;
+    delete mesh;
 }
 
 INT WINAPI wWinMain( HINSTANCE, HINSTANCE, LPWSTR, int )
