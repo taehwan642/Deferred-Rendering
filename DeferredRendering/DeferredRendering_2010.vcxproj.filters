@@ -75,7 +75,6 @@
   <ItemGroup>
     <ClCompile Include="DeferredRendering.cpp" />
     <ClCompile Include="Mesh.cpp" />
-    <ClCompile Include="Shader.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="Mesh.h" />
@@ -90,5 +89,8 @@
     </ResourceCompile>
   </ItemGroup>
   <ItemGroup>
+    <FxCompile Include="testShader.fx">
+      <Filter>Shaders</Filter>
+    </FxCompile>
   </ItemGroup>
 </Project>

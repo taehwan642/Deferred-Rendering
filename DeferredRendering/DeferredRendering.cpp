@@ -91,5 +91,3 @@ INT WINAPI wWinMain( HINSTANCE, HINSTANCE, LPWSTR, int )
 
     return DXUTGetExitCode();
 }
-
-
