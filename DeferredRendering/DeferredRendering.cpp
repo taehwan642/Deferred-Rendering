@@ -1,6 +1,7 @@
 #include "DXUT.h"
 #include "Mesh.h"
 #include "Shader.h"
+#include "VIBuffer.h"
 #include "resource.h"
 #include <memory>
 
@@ -13,6 +14,7 @@ D3DXMATRIX proj;
 
 Mesh* mesh;
 Shader* shader;
+VIBuffer* buffer;
 
 LPDIRECT3DTEXTURE9 diffuseRenderTarget;
 LPDIRECT3DSURFACE9 diffusetargetSurface;
@@ -100,6 +102,9 @@ HRESULT CALLBACK OnD3D9CreateDevice( IDirect3DDevice9* pd3dDevice, const D3DSURF
     if (FAILED(normalRenderTarget->GetSurfaceLevel(0, &normaltargetSurface)))
         return E_FAIL;
 
+    buffer = new VIBuffer;
+    buffer->Load(pd3dDevice, 0, 0, 150, 150);
+
     return S_OK;
 }
 
@@ -159,6 +164,7 @@ void CALLBACK OnD3D9DestroyDevice( void* pUserContext )
 
     delete shader;
     delete mesh;
+    delete buffer;
 }
 
 INT WINAPI wWinMain( HINSTANCE, HINSTANCE, LPWSTR, int )

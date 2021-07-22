@@ -31,7 +31,7 @@ VS_OUTPUT VS
 	return Out;
 }
 
-float4 PS(VS_OUTPUT In) : COLOR
+float4 PS(VS_OUTPUT In) : COLOR0
 {
 	return tex2D(Samp, In.Tex);
 }
