@@ -75,10 +75,12 @@
   <ItemGroup>
     <ClCompile Include="DeferredRendering.cpp" />
     <ClCompile Include="Mesh.cpp" />
+    <ClCompile Include="VIBuffer.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="Mesh.h" />
     <ClInclude Include="Shader.h" />
+    <ClInclude Include="VIBuffer.h" />
   </ItemGroup>
   <ItemGroup>
     <CLInclude Include="resource.h">

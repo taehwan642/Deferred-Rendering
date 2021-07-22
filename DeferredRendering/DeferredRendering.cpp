@@ -14,6 +14,16 @@ D3DXMATRIX proj;
 Mesh* mesh;
 Shader* shader;
 
+LPDIRECT3DTEXTURE9 diffuseRenderTarget;
+LPDIRECT3DSURFACE9 diffusetargetSurface;
+
+LPDIRECT3DTEXTURE9 normalRenderTarget;
+LPDIRECT3DSURFACE9 normaltargetSurface;
+
+LPDIRECT3DSURFACE9 backBuffer;
+
+D3DCOLOR clearColor = D3DCOLOR_ARGB(0, 45, 50, 170);
+
 bool CALLBACK IsD3D9DeviceAcceptable( D3DCAPS9* pCaps, D3DFORMAT AdapterFormat, D3DFORMAT BackBufferFormat,
                                       bool bWindowed, void* pUserContext )
 {
@@ -58,6 +68,38 @@ HRESULT CALLBACK OnD3D9CreateDevice( IDirect3DDevice9* pd3dDevice, const D3DSURF
 
     pd3dDevice->SetRenderState(D3DRS_LIGHTING, false);
 
+    D3DVIEWPORT9 viewPort;
+    pd3dDevice->GetViewport(&viewPort);
+    if (FAILED(D3DXCreateTexture(pd3dDevice, 
+        viewPort.Width, viewPort.Height, 
+        1, 
+        D3DUSAGE_RENDERTARGET, 
+        D3DFMT_A8B8G8R8, 
+        D3DPOOL_DEFAULT, 
+        &diffuseRenderTarget)))
+    {
+        MessageBoxA(NULL, "DIFFUSE_RENDER_TARGET_CREATE_FAILED", "FAIL", MB_OK);
+        return E_FAIL;
+    }
+
+    if (FAILED(diffuseRenderTarget->GetSurfaceLevel(0, &diffusetargetSurface)))
+        return E_FAIL;
+
+    if (FAILED(D3DXCreateTexture(pd3dDevice,
+        viewPort.Width, viewPort.Height,
+        1,
+        D3DUSAGE_RENDERTARGET,
+        D3DFMT_A16B16G16R16F,
+        D3DPOOL_DEFAULT,
+        &normalRenderTarget)))
+    {
+        MessageBoxA(NULL, "NORMAL_RENDER_TARGET_CREATE_FAILED", "FAIL", MB_OK);
+        return E_FAIL;
+    }
+
+    if (FAILED(normalRenderTarget->GetSurfaceLevel(0, &normaltargetSurface)))
+        return E_FAIL;
+
     return S_OK;
 }
 
@@ -75,7 +117,7 @@ void CALLBACK OnD3D9FrameRender( IDirect3DDevice9* pd3dDevice, double fTime, flo
 {
     HRESULT hr;
 
-    V( pd3dDevice->Clear( 0, NULL, D3DCLEAR_TARGET | D3DCLEAR_ZBUFFER, D3DCOLOR_ARGB( 0, 45, 50, 170 ), 1.0f, 0 ) );
+    V( pd3dDevice->Clear( 0, NULL, D3DCLEAR_TARGET | D3DCLEAR_ZBUFFER, clearColor, 1.0f, 0 ) );
 
     if( SUCCEEDED( pd3dDevice->BeginScene() ) )
     {
@@ -85,9 +127,13 @@ void CALLBACK OnD3D9FrameRender( IDirect3DDevice9* pd3dDevice, double fTime, flo
 
         effect->Begin(NULL, 0);
         effect->BeginPass(0);
+
         mesh->Render(shader);
+        
         effect->EndPass();
         effect->End();
+
+
 
         V( pd3dDevice->EndScene() );
     }
@@ -105,6 +151,12 @@ void CALLBACK OnD3D9LostDevice( void* pUserContext )
 
 void CALLBACK OnD3D9DestroyDevice( void* pUserContext )
 {
+    diffuseRenderTarget->Release();
+    diffusetargetSurface->Release();
+    
+    normalRenderTarget->Release();
+    normaltargetSurface->Release();
+
     delete shader;
     delete mesh;
 }
