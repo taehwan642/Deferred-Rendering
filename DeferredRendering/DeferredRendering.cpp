@@ -28,7 +28,10 @@ LPDIRECT3DSURFACE9 normaltargetSurface;
 
 LPDIRECT3DSURFACE9 backBuffer;
 
-D3DCOLOR clearColor = D3DCOLOR_ARGB(0, 45, 50, 170);
+LPDIRECT3DSURFACE9 index1RT;
+LPDIRECT3DSURFACE9 index2RT;
+
+D3DCOLOR clearColor = D3DCOLOR_ARGB(0, 45, 50, 0);
 
 bool CALLBACK IsD3D9DeviceAcceptable( D3DCAPS9* pCaps, D3DFORMAT AdapterFormat, D3DFORMAT BackBufferFormat,
                                       bool bWindowed, void* pUserContext )
@@ -135,6 +138,31 @@ void CALLBACK OnFrameMove( double fTime, float fElapsedTime, void* pUserContext 
     D3DXMatrixTranslation(&world, position.x, position.y, position.z);
 }
 
+void ClearTarget(LPDIRECT3DDEVICE9 device, LPDIRECT3DSURFACE9 targetSurface, LPDIRECT3DSURFACE9 oldSurface)
+{
+    device->GetRenderTarget(0, &oldSurface);
+    device->SetRenderTarget(0, targetSurface);
+
+    device->Clear(0, NULL, D3DCLEAR_TARGET, clearColor, 1.f, 0);
+
+    device->SetRenderTarget(0, oldSurface);
+    if (oldSurface != nullptr)
+        oldSurface->Release();
+}
+
+void SetUp(LPDIRECT3DDEVICE9 device, DWORD index, LPDIRECT3DSURFACE9 targetSurface, LPDIRECT3DSURFACE9 oldSurface)
+{
+    device->GetRenderTarget(index, &oldSurface);
+    device->SetRenderTarget(index, targetSurface);
+}
+
+void End(LPDIRECT3DDEVICE9 device, DWORD index, LPDIRECT3DSURFACE9 oldSurface)
+{
+    device->SetRenderTarget(index, oldSurface);
+    if (oldSurface != nullptr)
+        oldSurface->Release();
+}
+
 void CALLBACK OnD3D9FrameRender( IDirect3DDevice9* pd3dDevice, double fTime, float fElapsedTime, void* pUserContext )
 {
     HRESULT hr;
@@ -143,26 +171,11 @@ void CALLBACK OnD3D9FrameRender( IDirect3DDevice9* pd3dDevice, double fTime, flo
 
     if( SUCCEEDED( pd3dDevice->BeginScene() ) )
     {
-        pd3dDevice->GetRenderTarget(0, &backBuffer);
-        pd3dDevice->SetRenderTarget(0, diffusetargetSurface);
+        ClearTarget(pd3dDevice, diffusetargetSurface, index1RT);
+        ClearTarget(pd3dDevice, normaltargetSurface, index2RT);
 
-        pd3dDevice->Clear(0, nullptr, D3DCLEAR_TARGET, clearColor, 1.f, 0);
-
-        pd3dDevice->SetRenderTarget(0, backBuffer);
-        backBuffer->Release();
-
-        pd3dDevice->GetRenderTarget(0, &backBuffer);
-        pd3dDevice->SetRenderTarget(0, normaltargetSurface);
-
-        pd3dDevice->Clear(0, nullptr, D3DCLEAR_TARGET, clearColor, 1.f, 0);
-
-        pd3dDevice->SetRenderTarget(0, backBuffer);
-        backBuffer->Release();
-
-        pd3dDevice->SetRenderTarget(1, diffusetargetSurface);
-        pd3dDevice->SetRenderTarget(2, normaltargetSurface);
-
-
+        SetUp(pd3dDevice, 1, diffusetargetSurface, index1RT);
+        SetUp(pd3dDevice, 2, normaltargetSurface, index2RT);
 
         const LPD3DXEFFECT effect = shader->GetEffect();
         D3DXMATRIX result = world * view * proj;
@@ -176,6 +189,9 @@ void CALLBACK OnD3D9FrameRender( IDirect3DDevice9* pd3dDevice, double fTime, flo
         
         effect->EndPass();
         effect->End();
+
+        End(pd3dDevice, 1, index1RT);
+        End(pd3dDevice, 2, index2RT);
 
         pd3dDevice->SetTexture(0, diffuseRenderTarget);
         diffusebuffer->Render(pd3dDevice);
@@ -231,7 +247,7 @@ INT WINAPI wWinMain( HINSTANCE, HINSTANCE, LPWSTR, int )
     DXUTSetHotkeyHandling( true, true, true );
     DXUTSetCursorSettings( true, true );
     DXUTCreateWindow( L"DeferredRendering" );
-    DXUTCreateDevice( false, screenWidth, screenHeight );
+    DXUTCreateDevice( true, screenWidth, screenHeight );
 
     DXUTMainLoop();
 
