@@ -8,13 +8,17 @@
 constexpr int screenWidth = 1280;
 constexpr int screenHeight = 720;
 
+D3DXVECTOR3 position = { 0, 0, 0 };
+
 D3DXMATRIX world;
 D3DXMATRIX view;
 D3DXMATRIX proj;
 
 Mesh* mesh;
 Shader* shader;
-VIBuffer* buffer;
+
+VIBuffer* diffusebuffer;
+VIBuffer* normalbuffer;
 
 LPDIRECT3DTEXTURE9 diffuseRenderTarget;
 LPDIRECT3DSURFACE9 diffusetargetSurface;
@@ -46,9 +50,10 @@ bool CALLBACK ModifyDeviceSettings( DXUTDeviceSettings* pDeviceSettings, void* p
 HRESULT CALLBACK OnD3D9CreateDevice( IDirect3DDevice9* pd3dDevice, const D3DSURFACE_DESC* pBackBufferSurfaceDesc,
                                      void* pUserContext )
 {
+    const D3DSURFACE_DESC* bbsd = DXUTGetD3D9BackBufferSurfaceDesc();
     D3DXMatrixPerspectiveFovLH(&proj, D3DXToRadian(70),
-        static_cast<FLOAT>(DXUTGetD3D9BackBufferSurfaceDesc()->Width) /
-        static_cast<FLOAT>(DXUTGetD3D9BackBufferSurfaceDesc()->Height),
+        static_cast<FLOAT>(bbsd->Width) /
+        static_cast<FLOAT>(bbsd->Height),
         1,
         500);
     pd3dDevice->SetTransform(D3DTS_PROJECTION, &proj);
@@ -59,7 +64,7 @@ HRESULT CALLBACK OnD3D9CreateDevice( IDirect3DDevice9* pd3dDevice, const D3DSURF
     D3DXMatrixLookAtLH(&view, &eye, &lookat, &up);
     pd3dDevice->SetTransform(D3DTS_VIEW, &view);
 
-    D3DXMatrixTranslation(&world, 0, 0, 0);
+    D3DXMatrixTranslation(&world, position.x, position.y, position.z);
     pd3dDevice->SetTransform(D3DTS_WORLD, &world);
 
     mesh = new Mesh;
@@ -102,8 +107,11 @@ HRESULT CALLBACK OnD3D9CreateDevice( IDirect3DDevice9* pd3dDevice, const D3DSURF
     if (FAILED(normalRenderTarget->GetSurfaceLevel(0, &normaltargetSurface)))
         return E_FAIL;
 
-    buffer = new VIBuffer;
-    buffer->Load(pd3dDevice, 0, 0, 150, 150);
+    diffusebuffer = new VIBuffer;
+    diffusebuffer->Load(pd3dDevice, 0, 0, 150, 150);
+
+    normalbuffer = new VIBuffer;
+    normalbuffer->Load(pd3dDevice, 0, 150, 150, 150);
 
     return S_OK;
 }
@@ -116,19 +124,50 @@ HRESULT CALLBACK OnD3D9ResetDevice( IDirect3DDevice9* pd3dDevice, const D3DSURFA
 
 void CALLBACK OnFrameMove( double fTime, float fElapsedTime, void* pUserContext )
 {
+    if (DXUTIsKeyDown('W'))
+        position.z += 3.f * fElapsedTime;
+    if (DXUTIsKeyDown('S'))
+        position.z -= 3.f * fElapsedTime;
+    if (DXUTIsKeyDown('A'))
+        position.x -= 3.f * fElapsedTime;
+    if (DXUTIsKeyDown('D'))
+        position.x += 3.f * fElapsedTime;
+    D3DXMatrixTranslation(&world, position.x, position.y, position.z);
 }
 
 void CALLBACK OnD3D9FrameRender( IDirect3DDevice9* pd3dDevice, double fTime, float fElapsedTime, void* pUserContext )
 {
     HRESULT hr;
 
-    V( pd3dDevice->Clear( 0, NULL, D3DCLEAR_TARGET | D3DCLEAR_ZBUFFER, clearColor, 1.0f, 0 ) );
+    V( pd3dDevice->Clear( 0, NULL, D3DCLEAR_TARGET | D3DCLEAR_ZBUFFER, D3DCOLOR_ARGB(0, 45, 50, 170), 1.0f, 0 ) );
 
     if( SUCCEEDED( pd3dDevice->BeginScene() ) )
     {
+        pd3dDevice->GetRenderTarget(0, &backBuffer);
+        pd3dDevice->SetRenderTarget(0, diffusetargetSurface);
+
+        pd3dDevice->Clear(0, nullptr, D3DCLEAR_TARGET, clearColor, 1.f, 0);
+
+        pd3dDevice->SetRenderTarget(0, backBuffer);
+        backBuffer->Release();
+
+        pd3dDevice->GetRenderTarget(0, &backBuffer);
+        pd3dDevice->SetRenderTarget(0, normaltargetSurface);
+
+        pd3dDevice->Clear(0, nullptr, D3DCLEAR_TARGET, clearColor, 1.f, 0);
+
+        pd3dDevice->SetRenderTarget(0, backBuffer);
+        backBuffer->Release();
+
+        pd3dDevice->SetRenderTarget(1, diffusetargetSurface);
+        pd3dDevice->SetRenderTarget(2, normaltargetSurface);
+
+
+
         const LPD3DXEFFECT effect = shader->GetEffect();
         D3DXMATRIX result = world * view * proj;
         effect->SetMatrix((D3DXHANDLE)"WVP", &result);
+        effect->SetMatrix((D3DXHANDLE)"W", &world);
 
         effect->Begin(NULL, 0);
         effect->BeginPass(0);
@@ -138,7 +177,11 @@ void CALLBACK OnD3D9FrameRender( IDirect3DDevice9* pd3dDevice, double fTime, flo
         effect->EndPass();
         effect->End();
 
+        pd3dDevice->SetTexture(0, diffuseRenderTarget);
+        diffusebuffer->Render(pd3dDevice);
 
+        pd3dDevice->SetTexture(0, normalRenderTarget);
+        normalbuffer->Render(pd3dDevice);
 
         V( pd3dDevice->EndScene() );
     }
@@ -164,7 +207,8 @@ void CALLBACK OnD3D9DestroyDevice( void* pUserContext )
 
     delete shader;
     delete mesh;
-    delete buffer;
+    delete diffusebuffer;
+    delete normalbuffer;
 }
 
 INT WINAPI wWinMain( HINSTANCE, HINSTANCE, LPWSTR, int )
@@ -187,7 +231,7 @@ INT WINAPI wWinMain( HINSTANCE, HINSTANCE, LPWSTR, int )
     DXUTSetHotkeyHandling( true, true, true );
     DXUTSetCursorSettings( true, true );
     DXUTCreateWindow( L"DeferredRendering" );
-    DXUTCreateDevice( true, screenWidth, screenHeight );
+    DXUTCreateDevice( false, screenWidth, screenHeight );
 
     DXUTMainLoop();
 
