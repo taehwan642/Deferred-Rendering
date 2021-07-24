@@ -94,5 +94,11 @@
     <FxCompile Include="testShader.fx">
       <Filter>Shaders</Filter>
     </FxCompile>
+    <FxCompile Include="lightAccumulate.fx">
+      <Filter>Shaders</Filter>
+    </FxCompile>
+    <FxCompile Include="Blend.fx">
+      <Filter>Shaders</Filter>
+    </FxCompile>
   </ItemGroup>
 </Project>

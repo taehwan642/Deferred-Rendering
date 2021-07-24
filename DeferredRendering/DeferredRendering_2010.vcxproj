@@ -421,6 +421,8 @@
     <ClCompile Include="DeferredRendering.cpp" />
   </ItemGroup>
   <ItemGroup>
+    <FxCompile Include="Blend.fx" />
+    <FxCompile Include="lightAccumulate.fx" />
     <FxCompile Include="testShader.fx" />
   </ItemGroup>
   <ItemGroup>
