@@ -9,38 +9,56 @@ constexpr int screenWidth = 1280;
 constexpr int screenHeight = 720;
 
 D3DXVECTOR3 position = { 0, 0, 0 };
+float rotValue = 0.f;
 
 D3DXMATRIX world;
 D3DXMATRIX view;
 D3DXMATRIX proj;
 
 Mesh* mesh;
-Shader* shader;
+
+struct RenderTarget
+{
+    VIBuffer* buffer;
+
+    LPDIRECT3DTEXTURE9 renderTarget;
+    LPDIRECT3DSURFACE9 surface;
+
+    LPDIRECT3DSURFACE9 oldSurface;
+
+    D3DCOLOR clearColor = D3DCOLOR_ARGB(0, 45, 50, 0);
+
+    void SetRenderTarget(LPDIRECT3DDEVICE9 device, DWORD index)
+    {
+        device->GetRenderTarget(index, &oldSurface);
+        device->SetRenderTarget(index, surface);
+    };
+    
+    void End(LPDIRECT3DDEVICE9 device, DWORD index) 
+    {
+        device->SetRenderTarget(index, oldSurface);
+        if (oldSurface != nullptr)
+            oldSurface->Release();
+    };
+
+    void Clear(LPDIRECT3DDEVICE9 device) 
+    {
+        SetRenderTarget(device, 0);
+        device->Clear(0, NULL, D3DCLEAR_TARGET, clearColor, 1.f, 0);
+        End(device, 0);
+    };
+};
+
+enum RT { DIFFUSE, NORMAL, LIGHT, END };
+RenderTarget renderTargets[END];
+
+VIBuffer* lightBuffer;
+VIBuffer* blendBuffer;
+
+Shader* meshShader;
 Shader* deferred;
 Shader* blend;
 
-VIBuffer* diffusebuffer;
-VIBuffer* normalbuffer;
-VIBuffer* lightAccumulateBuffer;
-VIBuffer* blendbuffer;
-
-LPDIRECT3DTEXTURE9 diffuseRenderTarget;
-LPDIRECT3DSURFACE9 diffusetargetSurface;
-
-LPDIRECT3DTEXTURE9 normalRenderTarget;
-LPDIRECT3DSURFACE9 normaltargetSurface;
-
-LPDIRECT3DTEXTURE9 lightRenderTarget;
-LPDIRECT3DSURFACE9 lightAccumulated;
-
-LPDIRECT3DSURFACE9 backBuffer;
-
-LPDIRECT3DSURFACE9 index1RT;
-LPDIRECT3DSURFACE9 index2RT;
-
-
-
-D3DCOLOR clearColor = D3DCOLOR_ARGB(0, 45, 50, 0);
 
 bool CALLBACK IsD3D9DeviceAcceptable( D3DCAPS9* pCaps, D3DFORMAT AdapterFormat, D3DFORMAT BackBufferFormat,
                                       bool bWindowed, void* pUserContext )
@@ -57,6 +75,55 @@ bool CALLBACK IsD3D9DeviceAcceptable( D3DCAPS9* pCaps, D3DFORMAT AdapterFormat, 
 bool CALLBACK ModifyDeviceSettings( DXUTDeviceSettings* pDeviceSettings, void* pUserContext )
 {
     return true;
+}
+
+void Initialize(LPDIRECT3DDEVICE9 device)
+{
+    D3DVIEWPORT9 viewPort;
+    device->GetViewport(&viewPort);
+
+    for (int i = 0; i < END; ++i)
+    {
+        renderTargets[i].buffer = new VIBuffer;
+        renderTargets[i].buffer->Load(device, 0, 0 + (i * 200), 200, 200);
+
+        if (i == 0) 
+        {
+            if (FAILED(D3DXCreateTexture(device,
+                viewPort.Width, viewPort.Height,
+                1,
+                D3DUSAGE_RENDERTARGET,
+                D3DFMT_A8B8G8R8,
+                D3DPOOL_DEFAULT,
+                &renderTargets[i].renderTarget)))
+            {
+                MessageBoxA(NULL, "DIFFUSE_RENDER_TARGET_CREATE_FAILED", "FAIL", MB_OK);
+                return;
+            }
+        }
+        else
+        {
+            if (FAILED(D3DXCreateTexture(device,
+                viewPort.Width, viewPort.Height,
+                1,
+                D3DUSAGE_RENDERTARGET,
+                D3DFMT_A16B16G16R16F,
+                D3DPOOL_DEFAULT,
+                &renderTargets[i].renderTarget)))
+            {
+                MessageBoxA(NULL, "NORMAL_RENDER_TARGET_CREATE_FAILED", "FAIL", MB_OK);
+                return;
+            }
+        }
+        
+        renderTargets[i].renderTarget->GetSurfaceLevel(0, &renderTargets[i].surface);
+    }
+
+    lightBuffer = new VIBuffer;
+    lightBuffer->Load(device, 0, 0, viewPort.Width, viewPort.Height);
+
+    blendBuffer = new VIBuffer;
+    blendBuffer->Load(device, 0, 0, viewPort.Width, viewPort.Height);
 }
 
 HRESULT CALLBACK OnD3D9CreateDevice( IDirect3DDevice9* pd3dDevice, const D3DSURFACE_DESC* pBackBufferSurfaceDesc,
@@ -82,75 +149,18 @@ HRESULT CALLBACK OnD3D9CreateDevice( IDirect3DDevice9* pd3dDevice, const D3DSURF
     mesh = new Mesh;
     mesh->Load(pd3dDevice, L"Resources/", L"Missile.X");
     
-    shader = new Shader;
-    shader->Load(pd3dDevice, L"testShader.fx");
-
-    pd3dDevice->SetRenderState(D3DRS_LIGHTING, false);
-
-    D3DVIEWPORT9 viewPort;
-    pd3dDevice->GetViewport(&viewPort);
-    if (FAILED(D3DXCreateTexture(pd3dDevice, 
-        viewPort.Width, viewPort.Height, 
-        1, 
-        D3DUSAGE_RENDERTARGET, 
-        D3DFMT_A8B8G8R8, 
-        D3DPOOL_DEFAULT, 
-        &diffuseRenderTarget)))
-    {
-        MessageBoxA(NULL, "DIFFUSE_RENDER_TARGET_CREATE_FAILED", "FAIL", MB_OK);
-        return E_FAIL;
-    }
-
-    if (FAILED(diffuseRenderTarget->GetSurfaceLevel(0, &diffusetargetSurface)))
-        return E_FAIL;
-
-    if (FAILED(D3DXCreateTexture(pd3dDevice,
-        viewPort.Width, viewPort.Height,
-        1,
-        D3DUSAGE_RENDERTARGET,
-        D3DFMT_A16B16G16R16F,
-        D3DPOOL_DEFAULT,
-        &normalRenderTarget)))
-    {
-        MessageBoxA(NULL, "NORMAL_RENDER_TARGET_CREATE_FAILED", "FAIL", MB_OK);
-        return E_FAIL;
-    }
-
-    if (FAILED(normalRenderTarget->GetSurfaceLevel(0, &normaltargetSurface)))
-        return E_FAIL;
-
-    diffusebuffer = new VIBuffer;
-    diffusebuffer->Load(pd3dDevice, 0, 0, 150, 150);
-
-    normalbuffer = new VIBuffer;
-    normalbuffer->Load(pd3dDevice, 0, 150, 150, 150);
-
-    if (FAILED(D3DXCreateTexture(pd3dDevice,
-        viewPort.Width, viewPort.Height,
-        1,
-        D3DUSAGE_RENDERTARGET,
-        D3DFMT_A16B16G16R16F,
-        D3DPOOL_DEFAULT,
-        &lightRenderTarget)))
-    {
-        MessageBoxA(NULL, "LIGHT_RENDER_TARGET_CREATE_FAILED", "FAIL", MB_OK);
-        return E_FAIL;
-    }
-
-    if (FAILED(lightRenderTarget->GetSurfaceLevel(0, &lightAccumulated)))
-        return E_FAIL;
+    meshShader = new Shader;
+    meshShader->Load(pd3dDevice, L"meshShader.fx");
 
     deferred = new Shader;
     deferred->Load(pd3dDevice, L"lightAccumulate.fx");
 
-    lightAccumulateBuffer = new VIBuffer;
-    lightAccumulateBuffer->Load(pd3dDevice, 0, 0, viewPort.Width, viewPort.Height);
-
     blend = new Shader;
     blend->Load(pd3dDevice, L"Blend.fx");
 
-    blendbuffer = new VIBuffer;
-    blendbuffer->Load(pd3dDevice, 0, 0, viewPort.Width, viewPort.Height);
+    Initialize(pd3dDevice);
+
+    pd3dDevice->SetRenderState(D3DRS_LIGHTING, false);
 
     return S_OK;
 }
@@ -171,56 +181,30 @@ void CALLBACK OnFrameMove( double fTime, float fElapsedTime, void* pUserContext 
         position.x -= 3.f * fElapsedTime;
     if (DXUTIsKeyDown('D'))
         position.x += 3.f * fElapsedTime;
-    D3DXMatrixTranslation(&world, position.x, position.y, position.z);
-}
+    D3DXMATRIX trans;
+    D3DXMatrixTranslation(&trans, position.x, position.y, position.z);
+    
+    D3DXMATRIX rot;
+    if (DXUTIsKeyDown('Q'))
+        rotValue += 3.f * fElapsedTime;
+    
+    if (DXUTIsKeyDown('E'))
+        rotValue -= 3.f * fElapsedTime;
 
-void ClearTarget(LPDIRECT3DDEVICE9 device, LPDIRECT3DSURFACE9 targetSurface, LPDIRECT3DSURFACE9 oldSurface)
-{
-    device->GetRenderTarget(0, &oldSurface);
-    device->SetRenderTarget(0, targetSurface);
+    D3DXMatrixRotationZ(&rot, rotValue);
 
-    device->Clear(0, NULL, D3DCLEAR_TARGET, clearColor, 1.f, 0);
-
-    device->SetRenderTarget(0, oldSurface);
-    if (oldSurface != nullptr)
-        oldSurface->Release();
-}
-
-void SetUp(LPDIRECT3DDEVICE9 device, DWORD index, LPDIRECT3DSURFACE9 targetSurface, LPDIRECT3DSURFACE9 oldSurface)
-{
-    device->GetRenderTarget(index, &oldSurface);
-    device->SetRenderTarget(index, targetSurface);
-}
-
-void End(LPDIRECT3DDEVICE9 device, DWORD index, LPDIRECT3DSURFACE9 oldSurface)
-{
-    device->SetRenderTarget(index, oldSurface);
-    if (oldSurface != nullptr)
-        oldSurface->Release();
+    world = rot * trans;
 }
 
 void RenderMesh(LPDIRECT3DDEVICE9 pd3dDevice)
 {
-    pd3dDevice->GetRenderTarget(0, &backBuffer);
-    pd3dDevice->SetRenderTarget(0, diffusetargetSurface);
+    renderTargets[DIFFUSE].Clear(pd3dDevice);
+    renderTargets[NORMAL].Clear(pd3dDevice);
+    
+    renderTargets[DIFFUSE].SetRenderTarget(pd3dDevice, 0);
+    renderTargets[NORMAL].SetRenderTarget(pd3dDevice, 1);
 
-    pd3dDevice->Clear(0, nullptr, D3DCLEAR_TARGET, D3DCOLOR_ARGB(0, 255, 0, 0), 1.f, 0);
-
-    pd3dDevice->SetRenderTarget(0, backBuffer);
-    backBuffer->Release();
-
-    pd3dDevice->GetRenderTarget(0, &backBuffer);
-    pd3dDevice->SetRenderTarget(0, normaltargetSurface);
-
-    pd3dDevice->Clear(0, nullptr, D3DCLEAR_TARGET, D3DCOLOR_ARGB(0, 0, 255, 0), 1.f, 0);
-
-    pd3dDevice->SetRenderTarget(0, backBuffer);
-    backBuffer->Release();
-
-    SetUp(pd3dDevice, 1, diffusetargetSurface, index1RT);
-    SetUp(pd3dDevice, 2, normaltargetSurface, index2RT);
-
-    const LPD3DXEFFECT effect = shader->GetEffect();
+    const LPD3DXEFFECT effect = meshShader->GetEffect();
     D3DXMATRIX result = world * view * proj;
     effect->SetMatrix((D3DXHANDLE)"WVP", &result);
     effect->SetMatrix((D3DXHANDLE)"W", &world);
@@ -228,52 +212,45 @@ void RenderMesh(LPDIRECT3DDEVICE9 pd3dDevice)
     effect->Begin(NULL, 0);
     effect->BeginPass(0);
 
-    mesh->Render(shader);
+    mesh->Render(meshShader);
 
     effect->EndPass();
     effect->End();
 
-    End(pd3dDevice, 1, index1RT);
-    End(pd3dDevice, 2, index2RT);
+    renderTargets[DIFFUSE].End(pd3dDevice, 0);
+    renderTargets[NORMAL].End(pd3dDevice, 1);
 }
 
 void AccumulateLight(LPDIRECT3DDEVICE9 pd3dDevice)
 {
-    pd3dDevice->GetRenderTarget(0, &backBuffer);
-    pd3dDevice->SetRenderTarget(0, lightAccumulated);
-
-    pd3dDevice->Clear(0, nullptr, D3DCLEAR_TARGET, D3DCOLOR_ARGB(0, 255, 0, 0), 1.f, 0);
-
-    pd3dDevice->SetRenderTarget(0, backBuffer);
-    backBuffer->Release();
-
-    SetUp(pd3dDevice, 0, lightAccumulated, backBuffer);
+    renderTargets[LIGHT].Clear(pd3dDevice);
+    renderTargets[LIGHT].SetRenderTarget(pd3dDevice, 0);
 
     const LPD3DXEFFECT effect = deferred->GetEffect();
-    effect->SetTexture((D3DXHANDLE)"NormalTexture", normalRenderTarget);
+    effect->SetTexture((D3DXHANDLE)"NormalTexture", renderTargets[NORMAL].renderTarget);
     effect->SetValue((D3DXHANDLE)"lightDir", D3DXVECTOR4(0, -1.f, 0, 0), sizeof(D3DXVECTOR4));
 
     effect->Begin(NULL, 0);
     effect->BeginPass(0);
 
-    lightAccumulateBuffer->Render(pd3dDevice);
+    lightBuffer->Render(pd3dDevice);
 
     effect->EndPass();
     effect->End();
 
-    End(pd3dDevice, 0, backBuffer);
+    renderTargets[LIGHT].End(pd3dDevice, 0);
 }
 
 void Blend(LPDIRECT3DDEVICE9 pd3dDevice)
 {
     const LPD3DXEFFECT effect = blend->GetEffect();
-    effect->SetTexture((D3DXHANDLE)"diffuseTexture", diffuseRenderTarget);
-    effect->SetTexture((D3DXHANDLE)"lightAccumulatedTexture", lightRenderTarget);
+    effect->SetTexture((D3DXHANDLE)"diffuseTexture", renderTargets[DIFFUSE].renderTarget);
+    effect->SetTexture((D3DXHANDLE)"lightAccumulatedTexture", renderTargets[LIGHT].renderTarget);
 
     effect->Begin(NULL, 0);
     effect->BeginPass(0);
 
-    blendbuffer->Render(pd3dDevice);
+    blendBuffer->Render(pd3dDevice);
 
     effect->EndPass();
     effect->End();
@@ -293,11 +270,11 @@ void CALLBACK OnD3D9FrameRender( IDirect3DDevice9* pd3dDevice, double fTime, flo
 
         Blend(pd3dDevice);
 
-        pd3dDevice->SetTexture(0, diffuseRenderTarget);
-        diffusebuffer->Render(pd3dDevice);
-
-        pd3dDevice->SetTexture(0, normalRenderTarget);
-        normalbuffer->Render(pd3dDevice);
+        for (int i = 0; i < END; ++i)
+        {
+            pd3dDevice->SetTexture(0, renderTargets[i].renderTarget);
+            renderTargets[i].buffer->Render(pd3dDevice);
+        }
 
         V( pd3dDevice->EndScene() );
     }
@@ -315,21 +292,21 @@ void CALLBACK OnD3D9LostDevice( void* pUserContext )
 
 void CALLBACK OnD3D9DestroyDevice( void* pUserContext )
 {
-    diffuseRenderTarget->Release();
-    diffusetargetSurface->Release();
+    for (int i = 0; i < END; ++i)
+    {
+        delete renderTargets[i].buffer;
+        renderTargets[i].renderTarget->Release();
+        renderTargets[i].surface->Release();
+    }
     
-    normalRenderTarget->Release();
-    normaltargetSurface->Release();
+    delete lightBuffer;
+    delete blendBuffer;
 
-    lightRenderTarget->Release();
-    lightAccumulated->Release();
-
-    delete shader;
+    delete meshShader;
     delete deferred;
+    delete blend;
+
     delete mesh;
-    delete diffusebuffer;
-    delete normalbuffer;
-    delete lightAccumulateBuffer;
 }
 
 INT WINAPI wWinMain( HINSTANCE, HINSTANCE, LPWSTR, int )

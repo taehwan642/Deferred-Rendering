@@ -51,8 +51,7 @@ struct PS_IN
 struct PS_OUT
 {
 	float4	vDiffuse : COLOR0;
-	float4  vDiffuse2 : COLOR1;
-	float4	vNormal : COLOR2;
+	float4	vNormal : COLOR1;
 };
 
 PS_OUT PS_MAIN(PS_IN In)
@@ -61,9 +60,6 @@ PS_OUT PS_MAIN(PS_IN In)
 
 	Out.vDiffuse = tex2D(Samp, In.vTexUV);
 	Out.vDiffuse.a = 1.f;
-
-	Out.vDiffuse2 = tex2D(Samp, In.vTexUV);
-	Out.vDiffuse2.a = 1.f;
 
 	Out.vNormal = vector(In.vNormal.xyz * 0.5f + 0.5f, 0.f);
 

@@ -91,7 +91,7 @@
     </ResourceCompile>
   </ItemGroup>
   <ItemGroup>
-    <FxCompile Include="testShader.fx">
+    <FxCompile Include="meshShader.fx">
       <Filter>Shaders</Filter>
     </FxCompile>
     <FxCompile Include="lightAccumulate.fx">
